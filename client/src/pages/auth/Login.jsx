@@ -7,6 +7,7 @@ function Login() {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState('');
   const navigate = useNavigate();
   const { login } = useAuth();
 
@@ -19,18 +20,24 @@ function Login() {
     return newErrors;
   };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     const newErrors = validate();
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
     }
     setLoading(true);
-    setTimeout(() => {
+    setApiError('');
+    try {
+      const user = await login(email, password);
+      if (user.role === 'admin') navigate('/admin');
+      else if (user.role === 'instructor') navigate('/instructor');
+      else navigate('/student');
+    } catch (error) {
+      setApiError(error.response?.data?.message || 'Login failed. Please try again.');
+    } finally {
       setLoading(false);
-      login(email, 'student');
-      navigate('/student');
-    }, 1500);
+    }
   };
 
   const inputStyle = (field) => ({
@@ -116,6 +123,22 @@ function Login() {
             Login to continue your learning journey
           </p>
         </div>
+
+        {/* API Error */}
+        {apiError && (
+          <div style={{
+            background: 'rgba(252,92,125,0.1)',
+            border: '1px solid rgba(252,92,125,0.3)',
+            borderRadius: '10px',
+            padding: '12px 16px',
+            marginBottom: '20px',
+            color: '#fc5c7d',
+            fontSize: '14px',
+            textAlign: 'center'
+          }}>
+            ⚠️ {apiError}
+          </div>
+        )}
 
         {/* Email */}
         <div style={{ marginBottom: '20px' }}>

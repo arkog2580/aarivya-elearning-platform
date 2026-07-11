@@ -42,7 +42,7 @@ const enrollCourse = async (req, res) => {
 const getMyProgress = async (req, res) => {
   try {
     const progress = await Progress.find({ studentId: req.user.id })
-      .populate('courseId', 'title description thumbnail category');
+        .populate('courseId', 'title description thumbnail category lectures');
 
     res.json({ success: true, count: progress.length, progress });
   } catch (error) {

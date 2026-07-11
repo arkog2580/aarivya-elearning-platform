@@ -43,7 +43,8 @@ const createCourse = async (req, res) => {
       category,
       level,
       price,
-      instructorId: req.user.id
+      instructorId: req.user.id,
+      status: 'pending'
     });
 
     res.status(201).json({ success: true, course });

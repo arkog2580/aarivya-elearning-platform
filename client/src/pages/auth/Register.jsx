@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 function Register() {
   const [name, setName] = useState('');
@@ -8,7 +9,9 @@ function Register() {
   const [role, setRole] = useState('student');
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState('');
   const navigate = useNavigate();
+  const { register } = useAuth();
 
   const validate = () => {
     const newErrors = {};
@@ -21,17 +24,24 @@ function Register() {
     return newErrors;
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     const newErrors = validate();
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
     }
     setLoading(true);
-    setTimeout(() => {
+    setApiError('');
+    try {
+      const user = await register(name, email, password, role);
+      if (user.role === 'admin') navigate('/admin');
+      else if (user.role === 'instructor') navigate('/instructor');
+      else navigate('/student');
+    } catch (error) {
+      setApiError(error.response?.data?.message || 'Registration failed. Please try again.');
+    } finally {
       setLoading(false);
-      navigate('/student');
-    }, 1500);
+    }
   };
 
   const inputStyle = (field) => ({
@@ -118,6 +128,22 @@ function Register() {
             Join thousands of learners today
           </p>
         </div>
+
+        {/* API Error */}
+        {apiError && (
+          <div style={{
+            background: 'rgba(252,92,125,0.1)',
+            border: '1px solid rgba(252,92,125,0.3)',
+            borderRadius: '10px',
+            padding: '12px 16px',
+            marginBottom: '20px',
+            color: '#fc5c7d',
+            fontSize: '14px',
+            textAlign: 'center'
+          }}>
+            ⚠️ {apiError}
+          </div>
+        )}
 
         {/* Name */}
         <div style={{ marginBottom: '18px' }}>
@@ -206,7 +232,9 @@ function Register() {
           disabled={loading}
           style={{
             width: '100%', padding: '15px',
-            background: loading ? 'rgba(108,99,255,0.5)' : 'linear-gradient(135deg, #6c63ff, #48cfad)',
+            background: loading
+              ? 'rgba(108,99,255,0.5)'
+              : 'linear-gradient(135deg, #6c63ff, #48cfad)',
             color: 'white', border: 'none',
             borderRadius: '12px', fontSize: '16px', fontWeight: '700',
             boxShadow: '0 8px 25px rgba(108,99,255,0.4)',
