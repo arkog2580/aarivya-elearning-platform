@@ -35,5 +35,9 @@ export const getAllUsers = () => API.get('/admin/users');
 export const getPendingCourses = () => API.get('/admin/courses/pending');
 export const approveCourse = (id) => API.put(`/admin/courses/${id}/approve`);
 export const rejectCourse = (id) => API.put(`/admin/courses/${id}/reject`);
+// Recommendation APIs
+export const getRecommendations = () => API.get('/recommendations');
+export const updateInterests = (interests) => API.put('/recommendations/interests', { interests });
+export const getTrending = () => API.get('/recommendations/trending');
 
 export default API;

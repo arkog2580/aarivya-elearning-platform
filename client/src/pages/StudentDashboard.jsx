@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getMyProgress, getCourses, updateLectureProgress, enrollCourse } from '../api';
+import { getMyProgress, getCourses, updateLectureProgress, enrollCourse, getRecommendations, updateInterests } from '../api';
 import LectureViewer from '../components/LectureViewer';
 import Quiz from '../components/Quiz';
 function StudentDashboard() {
@@ -13,12 +13,16 @@ function StudentDashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [progressRes, coursesRes] = await Promise.all([
+        const [progressRes, coursesRes, recRes] = await Promise.all([
           getMyProgress(),
-          getCourses()
+          getCourses(),
+          getRecommendations()
         ]);
         setProgress(progressRes.data.progress || []);
         setCourses(coursesRes.data.courses || []);
+        setRecommendations(recRes.data.recommendations || []);
+        setUserInterests(recRes.data.userInterests || []);
+        setTempInterests(recRes.data.userInterests || []);
       } catch (error) {
         console.error('Error fetching data:', error);
       } finally {
@@ -60,6 +64,12 @@ function StudentDashboard() {
   const [enrollingId, setEnrollingId] = useState(null);
   const [activeQuiz, setActiveQuiz] = useState(null);
   const [quizScores, setQuizScores] = useState({});
+  const [recommendations, setRecommendations] = useState([]);
+  const [trending, setTrending] = useState([]);
+  const [userInterests, setUserInterests] = useState([]);
+  const [editingInterests, setEditingInterests] = useState(false);
+  const [tempInterests, setTempInterests] = useState([]);
+  const [savingInterests, setSavingInterests] = useState(false);
 
   const handleEnroll = async (courseId) => {
     setEnrollingId(courseId);
@@ -73,6 +83,21 @@ function StudentDashboard() {
       alert(error.response?.data?.message || 'Failed to enroll');
     } finally {
       setEnrollingId(null);
+    }
+  };
+  const handleSaveInterests = async () => {
+    setSavingInterests(true);
+    try {
+      await updateInterests(tempInterests);
+      setUserInterests(tempInterests);
+      setEditingInterests(false);
+      // Refresh recommendations
+      const recRes = await getRecommendations();
+      setRecommendations(recRes.data.recommendations || []);
+    } catch (error) {
+      console.error('Error saving interests:', error);
+    } finally {
+      setSavingInterests(false);
     }
   };
   const generateCertificate = (courseTitle, studentName) => {
@@ -133,7 +158,7 @@ function StudentDashboard() {
     link.href = canvas.toDataURL('image/png');
     link.click();
   };
-  const tabs = ['overview', 'my courses', 'explore', 'certificates'];
+  const tabs = ['overview', 'my courses', 'recommendations', 'explore', 'certificates'];
 
   if (loading) return (
     <div style={{
@@ -330,7 +355,77 @@ function StudentDashboard() {
                 </div>
               )}
             </div>
-
+            {/* Quick Recommendations */}
+            {recommendations.length > 0 && (
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(108,99,255,0.2)',
+                borderRadius: '20px', padding: '25px',
+                marginBottom: '25px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+                  <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#e0e6f0' }}>
+                    🤖 Recommended For You
+                  </h2>
+                  <button
+                    onClick={() => setActiveTab('recommendations')}
+                    style={{
+                      background: 'rgba(108,99,255,0.15)',
+                      border: '1px solid rgba(108,99,255,0.3)',
+                      color: '#a78bfa', padding: '6px 16px',
+                      borderRadius: '8px', fontSize: '13px', fontWeight: '700'
+                    }}
+                  >
+                    View All →
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+                  {recommendations.slice(0, 3).map((course, i) => {
+                    const colors = ['#6c63ff', '#48cfad', '#f7b731'];
+                    const color = colors[i % colors.length];
+                    return (
+                      <div key={i} style={{
+                        flex: '1', minWidth: '200px',
+                        background: 'rgba(255,255,255,0.03)',
+                        border: `1px solid ${color}30`,
+                        borderRadius: '12px', padding: '16px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                          <span style={{
+                            background: `${color}22`, color,
+                            padding: '3px 10px', borderRadius: '20px',
+                            fontSize: '11px', fontWeight: '700'
+                          }}>
+                            {course.category}
+                          </span>
+                          <span style={{ fontSize: '11px', color, fontWeight: '800' }}>
+                            {course.matchScore}%
+                          </span>
+                        </div>
+                        <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#e0e6f0', marginBottom: '6px' }}>
+                          {course.title}
+                        </h3>
+                        <p style={{ fontSize: '11px', color: '#475569', marginBottom: '12px' }}>
+                          {course.reason}
+                        </p>
+                        <button
+                          onClick={() => handleEnroll(course._id)}
+                          disabled={enrollingId === course._id}
+                          style={{
+                            width: '100%', padding: '8px',
+                            background: `linear-gradient(135deg, ${color}, ${color}88)`,
+                            color: 'white', border: 'none',
+                            borderRadius: '6px', fontSize: '12px', fontWeight: '700'
+                          }}
+                        >
+                          {enrollingId === course._id ? '⏳' : 'Enroll →'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {/* Activity Chart */}
             <div style={{
               background: 'rgba(255,255,255,0.03)',
@@ -577,6 +672,257 @@ function StudentDashboard() {
 
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* RECOMMENDATIONS TAB */}
+        {activeTab === 'recommendations' && (
+          <div>
+            {/* Header */}
+            <div style={{
+              display: 'flex', justifyContent: 'space-between',
+              alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '15px'
+            }}>
+              <div>
+                <h2 style={{ fontSize: '22px', fontWeight: '800', color: '#e0e6f0', marginBottom: '6px' }}>
+                  🤖 AI Recommendations
+                </h2>
+                <p style={{ color: '#64748b', fontSize: '14px' }}>
+                  Personalized courses based on your interests and activity
+                </p>
+              </div>
+              <button
+                onClick={() => setEditingInterests(!editingInterests)}
+                style={{
+                  background: 'rgba(108,99,255,0.15)',
+                  border: '1px solid rgba(108,99,255,0.3)',
+                  color: '#a78bfa', padding: '10px 20px',
+                  borderRadius: '10px', fontSize: '14px', fontWeight: '700'
+                }}
+              >
+                ✏️ Edit Interests
+              </button>
+            </div>
+
+            {/* Edit Interests Panel */}
+            {editingInterests && (
+              <div style={{
+                background: 'rgba(108,99,255,0.08)',
+                border: '1px solid rgba(108,99,255,0.25)',
+                borderRadius: '16px', padding: '25px',
+                marginBottom: '25px'
+              }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#e0e6f0', marginBottom: '15px' }}>
+                  🎯 Select Your Interests
+                </h3>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
+                  {['Programming', 'Web Development', 'Data Science', 'AI/ML', 'Design',
+                    'DevOps', 'Mobile Apps', 'Cybersecurity', 'Cloud Computing', 'Blockchain'].map(interest => (
+                    <button
+                      key={interest}
+                      onClick={() => setTempInterests(prev =>
+                        prev.includes(interest)
+                          ? prev.filter(i => i !== interest)
+                          : [...prev, interest]
+                      )}
+                      style={{
+                        padding: '8px 16px', borderRadius: '20px',
+                        border: tempInterests.includes(interest)
+                          ? '2px solid #6c63ff'
+                          : '1px solid rgba(255,255,255,0.1)',
+                        background: tempInterests.includes(interest)
+                          ? 'rgba(108,99,255,0.2)'
+                          : 'rgba(255,255,255,0.03)',
+                        color: tempInterests.includes(interest) ? '#a78bfa' : '#64748b',
+                        fontSize: '13px', fontWeight: '600', cursor: 'pointer'
+                      }}
+                    >
+                      {tempInterests.includes(interest) ? '✓ ' : ''}{interest}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button
+                    onClick={handleSaveInterests}
+                    disabled={savingInterests}
+                    style={{
+                      flex: 1, padding: '12px',
+                      background: 'linear-gradient(135deg, #6c63ff, #48cfad)',
+                      color: 'white', border: 'none',
+                      borderRadius: '10px', fontSize: '14px', fontWeight: '700'
+                    }}
+                  >
+                    {savingInterests ? '⏳ Saving...' : '✅ Save & Refresh'}
+                  </button>
+                  <button
+                    onClick={() => { setEditingInterests(false); setTempInterests(userInterests); }}
+                    style={{
+                      flex: 1, padding: '12px',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      color: '#64748b', borderRadius: '10px',
+                      fontSize: '14px', fontWeight: '700'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Current Interests */}
+            {userInterests.length > 0 && (
+              <div style={{ marginBottom: '25px' }}>
+                <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '10px' }}>
+                  Your interests:
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {userInterests.map((interest, i) => (
+                    <span key={i} style={{
+                      background: 'rgba(108,99,255,0.15)',
+                      border: '1px solid rgba(108,99,255,0.3)',
+                      color: '#a78bfa', padding: '4px 14px',
+                      borderRadius: '20px', fontSize: '13px', fontWeight: '600'
+                    }}>
+                      {interest}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Recommendations Grid */}
+            {recommendations.length === 0 ? (
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.07)',
+                borderRadius: '20px', padding: '60px', textAlign: 'center'
+              }}>
+                <p style={{ fontSize: '50px', marginBottom: '15px' }}>🤖</p>
+                <p style={{ color: '#e0e6f0', fontSize: '18px', fontWeight: '700', marginBottom: '10px' }}>
+                  No Recommendations Yet!
+                </p>
+                <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '20px' }}>
+                  Add your interests above or enroll in some courses to get personalized recommendations!
+                </p>
+                <button
+                  onClick={() => setEditingInterests(true)}
+                  style={{
+                    background: 'linear-gradient(135deg, #6c63ff, #48cfad)',
+                    color: 'white', border: 'none',
+                    padding: '12px 24px', borderRadius: '10px',
+                    fontSize: '14px', fontWeight: '700'
+                  }}
+                >
+                  Add Interests →
+                </button>
+              </div>
+            ) : (
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#94a3b8', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                  Recommended For You
+                </h3>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: '20px', marginBottom: '30px'
+                }}>
+                  {recommendations.map((course, i) => {
+                    const colors = ['#6c63ff', '#48cfad', '#f7b731', '#fc5c7d', '#a78bfa', '#48cfad'];
+                    const color = colors[i % colors.length];
+                    return (
+                      <div key={i} style={{
+                        background: 'rgba(255,255,255,0.03)',
+                        border: `1px solid ${color}30`,
+                        borderRadius: '16px', overflow: 'hidden',
+                        position: 'relative'
+                      }}>
+                        {/* Match Score Badge */}
+                        <div style={{
+                          position: 'absolute', top: '12px', right: '12px',
+                          background: `${color}22`,
+                          border: `1px solid ${color}44`,
+                          color, padding: '3px 10px',
+                          borderRadius: '20px', fontSize: '12px', fontWeight: '800'
+                        }}>
+                          {course.matchScore}% match
+                        </div>
+
+                        {/* Card Top */}
+                        <div style={{
+                          padding: '20px',
+                          background: `linear-gradient(135deg, ${color}15, ${color}05)`,
+                          borderBottom: `1px solid ${color}20`
+                        }}>
+                          <span style={{
+                            background: `${color}22`, color,
+                            padding: '4px 10px', borderRadius: '20px',
+                            fontSize: '11px', fontWeight: '700'
+                          }}>
+                            {course.category}
+                          </span>
+                          <h3 style={{
+                            fontSize: '16px', fontWeight: '700',
+                            color: '#e0e6f0', margin: '10px 0 6px',
+                            paddingRight: '60px'
+                          }}>
+                            {course.title}
+                          </h3>
+                          <p style={{ fontSize: '12px', color: '#475569' }}>
+                            by {course.instructorName}
+                          </p>
+                        </div>
+
+                        {/* Card Bottom */}
+                        <div style={{ padding: '15px 20px' }}>
+                          {/* Why Recommended */}
+                          <div style={{
+                            background: 'rgba(255,255,255,0.03)',
+                            border: '1px solid rgba(255,255,255,0.06)',
+                            borderRadius: '8px', padding: '10px 12px',
+                            marginBottom: '12px'
+                          }}>
+                            <p style={{ fontSize: '11px', color: '#6c63ff', fontWeight: '700', marginBottom: '3px' }}>
+                              🤖 WHY RECOMMENDED
+                            </p>
+                            <p style={{ fontSize: '12px', color: '#64748b', lineHeight: '1.5' }}>
+                              {course.reason}
+                            </p>
+                          </div>
+
+                          {/* Stats */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                            <span style={{ fontSize: '12px', color: '#475569' }}>
+                              👨‍🎓 {course.enrolledCount} enrolled
+                            </span>
+                            <span style={{ fontSize: '12px', color: '#f7b731' }}>
+                              ⭐ {course.rating || 'New'}
+                            </span>
+                            <span style={{ fontSize: '12px', color: '#475569', textTransform: 'capitalize' }}>
+                              📊 {course.level}
+                            </span>
+                          </div>
+
+                          {/* Enroll Button */}
+                          <button
+                            onClick={() => handleEnroll(course._id)}
+                            disabled={enrollingId === course._id}
+                            style={{
+                              width: '100%', padding: '10px',
+                              background: `linear-gradient(135deg, ${color}, ${color}88)`,
+                              color: 'white', border: 'none',
+                              borderRadius: '8px', fontSize: '13px', fontWeight: '700'
+                            }}
+                          >
+                            {enrollingId === course._id ? '⏳ Enrolling...' : 'Enroll Now →'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>

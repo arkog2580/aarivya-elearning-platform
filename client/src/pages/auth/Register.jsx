@@ -7,6 +7,7 @@ function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('student');
+  const [interests, setInterests] = useState([]);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
@@ -33,7 +34,7 @@ function Register() {
     setLoading(true);
     setApiError('');
     try {
-      const user = await register(name, email, password, role);
+      const user = await register(name, email, password, role,interests);
       if (user.role === 'admin') navigate('/admin');
       else if (user.role === 'instructor') navigate('/instructor');
       else navigate('/student');
@@ -195,6 +196,39 @@ function Register() {
             </p>
           )}
         </div>
+        
+        {/* Interests */}
+        {role === 'student' && (
+          <div style={{ marginBottom: '20px' }}>
+            <label style={labelStyle}>Your Interests (select all that apply)</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {['Programming', 'Web Development', 'Data Science', 'AI/ML', 'Design', 'DevOps', 'Mobile Apps', 'Cybersecurity', 'Cloud Computing', 'Blockchain'].map(interest => (
+                <button
+                  key={interest}
+                  onClick={() => setInterests(prev =>
+                    prev.includes(interest)
+                      ? prev.filter(i => i !== interest)
+                      : [...prev, interest]
+                  )}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '20px',
+                    border: interests.includes(interest)
+                      ? '2px solid #6c63ff'
+                      : '1px solid rgba(255,255,255,0.1)',
+                    background: interests.includes(interest)
+                      ? 'rgba(108,99,255,0.2)'
+                      : 'rgba(255,255,255,0.03)',
+                    color: interests.includes(interest) ? '#a78bfa' : '#64748b',
+                    fontSize: '13px', fontWeight: '600', cursor: 'pointer'
+                  }}
+                >
+                  {interests.includes(interest) ? '✓ ' : ''}{interest}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Role */}
         <div style={{ marginBottom: '28px' }}>
