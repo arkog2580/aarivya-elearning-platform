@@ -3,8 +3,13 @@ import { useAuth } from '../context/AuthContext';
 import { getMyProgress, getCourses, updateLectureProgress, enrollCourse, getRecommendations, updateInterests } from '../api';
 import LectureViewer from '../components/LectureViewer';
 import Quiz from '../components/Quiz';
+import NotificationBell from '../components/NotificationBell';
+import CourseChat from '../components/CourseChat';
+import { useSocket } from '../hooks/useSocket';
 function StudentDashboard() {
   const { user, logout } = useAuth();
+  const { socket, connected, notifications, clearNotification, clearAllNotifications, joinCourseRoom, leaveCourseRoom, sendMessage } = useSocket(user);
+  const [activeChat, setActiveChat] = useState(null);
   const [progress, setProgress] = useState([]);
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -202,17 +207,25 @@ function StudentDashboard() {
             Continue your learning journey
           </p>
         </div>
-        <button
-          onClick={logout}
-          style={{
-            background: 'rgba(252,92,125,0.15)',
-            border: '1px solid rgba(252,92,125,0.3)',
-            color: '#fc5c7d', padding: '10px 20px',
-            borderRadius: '10px', fontSize: '14px', fontWeight: '600'
-          }}
-        >
-          Logout
-        </button>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <NotificationBell
+            notifications={notifications}
+            onClear={clearNotification}
+            onClearAll={clearAllNotifications}
+            connected={connected}
+          />
+          <button
+            onClick={logout}
+            style={{
+              background: 'rgba(252,92,125,0.15)',
+              border: '1px solid rgba(252,92,125,0.3)',
+              color: '#fc5c7d', padding: '10px 20px',
+              borderRadius: '10px', fontSize: '14px', fontWeight: '600'
+            }}
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
       <div style={{ padding: '30px 50px' }}>
@@ -507,6 +520,24 @@ function StudentDashboard() {
                         <p style={{ fontSize: '13px', color: '#475569' }}>
                           {p.courseId?.category} • {p.completedLectures?.length || 0}/{p.courseId?.lectures?.length || 0} lectures completed
                         </p>
+                        <button
+                        onClick={() => {
+                          const id = p.courseId._id?.toString();
+                          setActiveChat(prev => prev === id ? null : id);
+                        }}
+                        style={{
+                          marginTop: '8px',
+                          background: activeChat === p.courseId._id
+                            ? 'linear-gradient(135deg, #6c63ff, #48cfad)'
+                            : 'rgba(108,99,255,0.15)',
+                          border: '1px solid rgba(108,99,255,0.3)',
+                          color: activeChat === p.courseId._id ? 'white' : '#a78bfa',
+                          padding: '5px 14px', borderRadius: '8px',
+                          fontSize: '12px', fontWeight: '700'
+                        }}
+                      >
+                        💬 {activeChat === p.courseId._id ? 'Close Chat' : 'Open Chat'}
+                      </button>
                       </div>
                       <div style={{ textAlign: 'center' }}>
                         <p style={{ fontSize: '32px', fontWeight: '900', color: '#6c63ff' }}>
@@ -1066,6 +1097,21 @@ function StudentDashboard() {
         )}
 
       </div>
+      {/* Course Chat Popup */}
+      {activeChat && (
+        <CourseChat
+          courseId={activeChat}
+          courseName={
+            progress.find(p =>
+              p.courseId._id === activeChat ||
+              p.courseId._id?.toString() === activeChat?.toString()
+            )?.courseId?.title || 'Course Discussion'
+          }
+          user={user}
+          socket={socket}
+          onClose={() => setActiveChat(null)}
+        />
+      )}
     </div>
   );
 }

@@ -2,10 +2,14 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import API from '../api';
+import NotificationBell from '../components/NotificationBell';
+import LiveClassroom from '../components/LiveClassroom';
+import { useSocket } from '../hooks/useSocket';
 
 function InstructorDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { socket, connected, notifications, clearNotification, clearAllNotifications, startLiveSession, endLiveSession } = useSocket(user);
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
@@ -151,7 +155,13 @@ function InstructorDashboard() {
           </h1>
           <p style={{ color: '#475569', fontSize: '14px', marginTop: '4px' }}>Welcome back, {user?.name}!</p>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <NotificationBell
+            notifications={notifications}
+            onClear={clearNotification}
+            onClearAll={clearAllNotifications}
+            connected={connected}
+          />
           <button onClick={() => setShowCreateForm(true)} style={{ background: 'linear-gradient(135deg, #6c63ff, #48cfad)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontSize: '14px', fontWeight: '700' }}>
             + Create Course
           </button>
@@ -203,7 +213,7 @@ function InstructorDashboard() {
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '30px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '14px', padding: '6px' }}>
-          {['overview', 'my courses', 'analytics'].map(tab => (
+          {['overview', 'my courses', 'live classroom', 'analytics'].map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', background: activeTab === tab ? 'linear-gradient(135deg, #6c63ff, #48cfad)' : 'transparent', color: activeTab === tab ? 'white' : '#64748b', fontSize: '14px', fontWeight: '700', textTransform: 'capitalize', cursor: 'pointer' }}>
               {tab}
             </button>
@@ -405,6 +415,15 @@ function InstructorDashboard() {
               );
             })}
           </div>
+        )}
+
+        {/* LIVE CLASSROOM TAB */}
+        {activeTab === 'live classroom' && (
+          <LiveClassroom
+            user={user}
+            socket={socket}
+            enrolledCourses={courses}
+          />
         )}
 
         {/* ANALYTICS TAB */}
