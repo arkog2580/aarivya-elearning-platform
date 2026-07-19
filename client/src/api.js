@@ -40,4 +40,12 @@ export const getRecommendations = () => API.get('/recommendations');
 export const updateInterests = (interests) => API.put('/recommendations/interests', { interests });
 export const getTrending = () => API.get('/recommendations/trending');
 
+// Assignment APIs
+export const createAssignment = (data) => API.post('/assignments', data);
+export const getCourseAssignments = (courseId) => API.get(`/assignments/course/${courseId}`);
+export const getStudentAssignments = () => API.get('/assignments/student');
+export const getInstructorAssignments = () => API.get('/assignments/instructor');
+export const submitAssignment = (id, data) => API.post(`/assignments/${id}/submit`, data);
+export const gradeAssignment = (id, studentId, data) => API.put(`/assignments/${id}/grade/${studentId}`, data);
+
 export default API;

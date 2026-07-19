@@ -5,38 +5,33 @@ function CourseChat({ courseId, courseName, user, socket, onClose }) {
   const [newMessage, setNewMessage] = useState('');
   const [typingUser, setTypingUser] = useState(null);
   const [isTyping, setIsTyping] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState('');
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
   useEffect(() => {
     if (!socket) return;
 
-    // Join course room
     socket.emit('join_course_room', { courseId, user });
 
-    // Listen for chat history
-    socket.on('chat_history', (history) => {
-      setMessages(history);
+    socket.on('chat_history', (history) => setMessages(history));
+    socket.on('new_message', (message) => setMessages(prev => [...prev, message]));
+    socket.on('message_deleted', (messageId) => {
+      setMessages(prev => prev.filter(m => m.id !== messageId));
     });
-
-    // Listen for new messages
-    socket.on('new_message', (message) => {
-      setMessages(prev => [...prev, message]);
+    socket.on('message_edited', (updatedMessage) => {
+      setMessages(prev => prev.map(m => m.id === updatedMessage.id ? updatedMessage : m));
     });
-
-    // Listen for typing
-    socket.on('user_typing', (typingUser) => {
-      setTypingUser(typingUser);
-    });
-
-    socket.on('user_stop_typing', () => {
-      setTypingUser(null);
-    });
+    socket.on('user_typing', (typingUser) => setTypingUser(typingUser));
+    socket.on('user_stop_typing', () => setTypingUser(null));
 
     return () => {
       socket.emit('leave_course_room', { courseId, user });
       socket.off('chat_history');
       socket.off('new_message');
+      socket.off('message_deleted');
+      socket.off('message_edited');
       socket.off('user_typing');
       socket.off('user_stop_typing');
     };
@@ -59,6 +54,26 @@ function CourseChat({ courseId, courseName, user, socket, onClose }) {
     });
     setNewMessage('');
     socket?.emit('stop_typing', { courseId });
+  };
+
+  const handleDelete = (messageId) => {
+    socket?.emit('delete_message', { courseId, messageId });
+  };
+
+  const handleEdit = (message) => {
+    setEditingId(message.id);
+    setEditText(message.text);
+  };
+
+  const handleSaveEdit = (messageId) => {
+    if (!editText.trim()) return;
+    socket?.emit('edit_message', {
+      courseId,
+      messageId,
+      newText: editText.trim()
+    });
+    setEditingId(null);
+    setEditText('');
   };
 
   const handleTyping = (e) => {
@@ -92,7 +107,7 @@ function CourseChat({ courseId, courseName, user, socket, onClose }) {
   return (
     <div style={{
       position: 'fixed', bottom: '20px', right: '20px',
-      width: '360px', height: '500px',
+      width: '380px', height: '520px',
       background: 'rgba(6,13,31,0.98)',
       backdropFilter: 'blur(20px)',
       border: '1px solid rgba(108,99,255,0.3)',
@@ -101,21 +116,21 @@ function CourseChat({ courseId, courseName, user, socket, onClose }) {
       display: 'flex', flexDirection: 'column',
       zIndex: 9998
     }}>
+
       {/* Header */}
       <div style={{
         padding: '16px 20px',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
-        display: 'flex', justifyContent: 'space-between',
-        alignItems: 'center',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         background: 'linear-gradient(135deg, rgba(108,99,255,0.15), rgba(72,207,173,0.1))',
         borderRadius: '20px 20px 0 0'
       }}>
         <div>
           <h3 style={{ color: '#e0e6f0', fontSize: '14px', fontWeight: '700' }}>
-            💬 {courseName}
+            💬 Course Discussion
           </h3>
           <p style={{ color: '#475569', fontSize: '12px' }}>
-            Course Discussion
+            {courseName} — All enrolled students
           </p>
         </div>
         <button
@@ -124,12 +139,9 @@ function CourseChat({ courseId, courseName, user, socket, onClose }) {
             background: 'rgba(252,92,125,0.15)',
             border: '1px solid rgba(252,92,125,0.3)',
             color: '#fc5c7d', borderRadius: '8px',
-            padding: '4px 10px', cursor: 'pointer',
-            fontSize: '16px'
+            padding: '4px 10px', cursor: 'pointer', fontSize: '16px'
           }}
-        >
-          ×
-        </button>
+        >×</button>
       </div>
 
       {/* Messages */}
@@ -151,57 +163,134 @@ function CourseChat({ courseId, courseName, user, socket, onClose }) {
               <div key={i} style={{
                 display: 'flex',
                 flexDirection: isOwn ? 'row-reverse' : 'row',
-                gap: '8px', alignItems: 'flex-end'
+                gap: '8px', alignItems: 'flex-start'
               }}>
                 {/* Avatar */}
                 <div style={{
                   width: '30px', height: '30px',
                   background: `${getRoleColor(msg.senderRole)}33`,
                   borderRadius: '8px',
-                  display: 'flex', alignItems: 'center',
-                  justifyContent: 'center',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: '13px', fontWeight: '800',
-                  color: getRoleColor(msg.senderRole),
-                  flexShrink: 0
+                  color: getRoleColor(msg.senderRole), flexShrink: 0
                 }}>
                   {msg.senderName?.charAt(0).toUpperCase()}
                 </div>
 
-                {/* Message Bubble */}
+                {/* Bubble */}
                 <div style={{ maxWidth: '75%' }}>
                   {!isOwn && (
                     <p style={{
                       fontSize: '11px', color: getRoleColor(msg.senderRole),
-                      fontWeight: '700', marginBottom: '3px',
-                      textTransform: 'capitalize'
+                      fontWeight: '700', marginBottom: '3px', textTransform: 'capitalize'
                     }}>
                       {msg.senderName} • {msg.senderRole}
                     </p>
                   )}
-                  <div style={{
-                    padding: '10px 14px',
-                    background: isOwn
-                      ? 'linear-gradient(135deg, #6c63ff, #48cfad)'
-                      : 'rgba(255,255,255,0.06)',
-                    borderRadius: isOwn
-                      ? '14px 14px 4px 14px'
-                      : '14px 14px 14px 4px',
-                    border: isOwn ? 'none' : '1px solid rgba(255,255,255,0.06)'
-                  }}>
-                    <p style={{
-                      color: 'white', fontSize: '13px',
-                      lineHeight: '1.5', wordBreak: 'break-word'
-                    }}>
-                      {msg.text}
-                    </p>
-                  </div>
-                  <p style={{
-                    fontSize: '10px', color: '#334155',
-                    marginTop: '3px',
-                    textAlign: isOwn ? 'right' : 'left'
-                  }}>
-                    {new Date(msg.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </p>
+
+                  {editingId === msg.id ? (
+                    <div>
+                      <input
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        style={{
+                          width: '100%', padding: '8px 12px',
+                          background: 'rgba(255,255,255,0.08)',
+                          border: '1px solid rgba(108,99,255,0.4)',
+                          borderRadius: '8px', color: '#e0e6f0',
+                          fontSize: '13px', outline: 'none',
+                          boxSizing: 'border-box', marginBottom: '6px'
+                        }}
+                      />
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          onClick={() => handleSaveEdit(msg.id)}
+                          style={{
+                            flex: 1, padding: '5px',
+                            background: 'linear-gradient(135deg, #6c63ff, #48cfad)',
+                            border: 'none', borderRadius: '6px',
+                            color: 'white', fontSize: '12px', fontWeight: '700'
+                          }}
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setEditingId(null)}
+                          style={{
+                            flex: 1, padding: '5px',
+                            background: 'rgba(255,255,255,0.05)',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            borderRadius: '6px', color: '#64748b',
+                            fontSize: '12px', fontWeight: '700'
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{
+                        padding: '10px 14px',
+                        background: isOwn
+                          ? 'linear-gradient(135deg, #6c63ff, #48cfad)'
+                          : 'rgba(255,255,255,0.06)',
+                        borderRadius: isOwn ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
+                        border: isOwn ? 'none' : '1px solid rgba(255,255,255,0.06)'
+                      }}>
+                        <p style={{
+                          color: 'white', fontSize: '13px',
+                          lineHeight: '1.5', wordBreak: 'break-word'
+                        }}>
+                          {msg.text}
+                          {msg.edited && (
+                            <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', marginLeft: '6px' }}>
+                              (edited)
+                            </span>
+                          )}
+                        </p>
+                      </div>
+
+                      {/* Actions */}
+                      <div style={{
+                        display: 'flex', gap: '8px', marginTop: '4px',
+                        justifyContent: isOwn ? 'flex-end' : 'flex-start',
+                        alignItems: 'center'
+                      }}>
+                        <p style={{
+                          fontSize: '10px', color: '#334155',
+                        }}>
+                          {new Date(msg.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                        {isOwn && (
+                          <>
+                            <button
+                              onClick={() => handleEdit(msg)}
+                              style={{
+                                background: 'none', border: 'none',
+                                color: '#475569', fontSize: '11px',
+                                cursor: 'pointer', fontWeight: '600',
+                                padding: '0'
+                              }}
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button
+                              onClick={() => handleDelete(msg.id)}
+                              style={{
+                                background: 'none', border: 'none',
+                                color: '#fc5c7d', fontSize: '11px',
+                                cursor: 'pointer', fontWeight: '600',
+                                padding: '0'
+                              }}
+                            >
+                              🗑 Delete
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -215,8 +304,7 @@ function CourseChat({ courseId, courseName, user, socket, onClose }) {
               width: '30px', height: '30px',
               background: 'rgba(108,99,255,0.2)',
               borderRadius: '8px',
-              display: 'flex', alignItems: 'center',
-              justifyContent: 'center',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: '13px', fontWeight: '800', color: '#6c63ff'
             }}>
               {typingUser.name?.charAt(0).toUpperCase()}
@@ -224,7 +312,7 @@ function CourseChat({ courseId, courseName, user, socket, onClose }) {
             <div style={{
               padding: '10px 14px',
               background: 'rgba(255,255,255,0.06)',
-              borderRadius: '14px 14px 14px 4px',
+              borderRadius: '14px',
               display: 'flex', gap: '4px', alignItems: 'center'
             }}>
               {[0, 1, 2].map(i => (
@@ -234,12 +322,7 @@ function CourseChat({ courseId, courseName, user, socket, onClose }) {
                   animation: `bounce 1s ease-in-out ${i * 0.2}s infinite`
                 }} />
               ))}
-              <style>{`
-                @keyframes bounce {
-                  0%, 100% { transform: translateY(0); }
-                  50% { transform: translateY(-4px); }
-                }
-              `}</style>
+              <style>{`@keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }`}</style>
             </div>
             <p style={{ color: '#475569', fontSize: '11px' }}>
               {typingUser.name} is typing...
@@ -259,7 +342,7 @@ function CourseChat({ courseId, courseName, user, socket, onClose }) {
           value={newMessage}
           onChange={handleTyping}
           onKeyPress={handleKeyPress}
-          placeholder="Type a message..."
+          placeholder="Type a message... (Enter to send)"
           style={{
             flex: 1, padding: '10px 14px',
             background: 'rgba(255,255,255,0.05)',

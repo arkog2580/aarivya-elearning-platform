@@ -29,6 +29,7 @@ app.use('/api/courses', require('./routes/courseRoutes'));
 app.use('/api/progress', require('./routes/progressRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/recommendations', require('./routes/recommendationRoutes'));
+app.use('/api/assignments', require('./routes/assignmentRoutes'));
 
 // Base route
 app.get('/', (req, res) => {
@@ -92,6 +93,28 @@ io.on('connection', (socket) => {
       ...message,
       time: new Date().toISOString()
     };
+    // Delete message
+  socket.on('delete_message', ({ courseId, messageId }) => {
+    if (chatMessages.has(courseId)) {
+      const messages = chatMessages.get(courseId);
+      const filtered = messages.filter(m => m.id !== messageId);
+      chatMessages.set(courseId, filtered);
+    }
+    io.to(`course_${courseId}`).emit('message_deleted', messageId);
+  });
+
+  // Edit message
+  socket.on('edit_message', ({ courseId, messageId, newText }) => {
+    if (chatMessages.has(courseId)) {
+      const messages = chatMessages.get(courseId);
+      const updated = messages.map(m =>
+        m.id === messageId ? { ...m, text: newText, edited: true } : m
+      );
+      chatMessages.set(courseId, updated);
+      const editedMessage = updated.find(m => m.id === messageId);
+      io.to(`course_${courseId}`).emit('message_edited', editedMessage);
+    }
+  });
 
     // Store message
     if (!chatMessages.has(courseId)) {

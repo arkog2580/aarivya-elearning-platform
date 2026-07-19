@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import API from '../api';
+import { getInstructorAssignments, createAssignment, gradeAssignment } from '../api';
 import NotificationBell from '../components/NotificationBell';
 import LiveClassroom from '../components/LiveClassroom';
+import CourseChat from '../components/CourseChat';
 import { useSocket } from '../hooks/useSocket';
 
 function InstructorDashboard() {
@@ -25,8 +27,30 @@ function InstructorDashboard() {
   const [addingLecture, setAddingLecture] = useState(false);
   const [expandedCourse, setExpandedCourse] = useState(null);
   const [deletingCourse, setDeletingCourse] = useState(null);
+  const [activeChat, setActiveChat] = useState(null);
+  const [assignments, setAssignments] = useState([]);
+  const [showAssignmentForm, setShowAssignmentForm] = useState(false);
+  const [newAssignment, setNewAssignment] = useState({
+    courseId: '', title: '', description: '', dueDate: '', maxMarks: 100
+  });
+  const [creatingAssignment, setCreatingAssignment] = useState(false);
+  const [assignmentMsg, setAssignmentMsg] = useState('');
+  const [gradingId, setGradingId] = useState(null);
+  const [gradeData, setGradeData] = useState({});
 
-  useEffect(() => { fetchCourses(); }, []);
+  useEffect(() => {
+    fetchCourses();
+    fetchAssignments();
+  }, []);
+
+  const fetchAssignments = async () => {
+    try {
+      const res = await getInstructorAssignments();
+      setAssignments(res.data.assignments || []);
+    } catch (error) {
+      console.error('Error fetching assignments:', error);
+    }
+  };
 
   const fetchCourses = async () => {
     try {
@@ -213,7 +237,7 @@ function InstructorDashboard() {
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '30px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '14px', padding: '6px' }}>
-          {['overview', 'my courses', 'live classroom', 'analytics'].map(tab => (
+          {['overview', 'my courses', 'assignments', 'live classroom', 'analytics'].map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', background: activeTab === tab ? 'linear-gradient(135deg, #6c63ff, #48cfad)' : 'transparent', color: activeTab === tab ? 'white' : '#64748b', fontSize: '14px', fontWeight: '700', textTransform: 'capitalize', cursor: 'pointer' }}>
               {tab}
             </button>
@@ -319,6 +343,23 @@ function InstructorDashboard() {
                         {expandedCourse === course._id ? 'Hide ▲' : 'Manage ▼'}
                       </button>
                       <button
+                        onClick={() => {
+                          const id = course._id?.toString();
+                          setActiveChat(prev => prev === id ? null : id);
+                        }}
+                        style={{
+                          background: activeChat === course._id?.toString()
+                            ? 'linear-gradient(135deg, #6c63ff, #48cfad)'
+                            : 'rgba(108,99,255,0.15)',
+                          border: '1px solid rgba(108,99,255,0.3)',
+                          color: activeChat === course._id?.toString() ? 'white' : '#a78bfa',
+                          padding: '6px 14px', borderRadius: '8px',
+                          fontSize: '13px', fontWeight: '600'
+                        }}
+                      >
+                        💬 Chat
+                      </button>
+                      <button
                         onClick={() => handleDeleteCourse(course._id)}
                         style={{ background: 'rgba(252,92,125,0.15)', border: '1px solid rgba(252,92,125,0.3)', color: '#fc5c7d', padding: '6px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: '600' }}
                       >
@@ -416,6 +457,384 @@ function InstructorDashboard() {
             })}
           </div>
         )}
+        {/* ASSIGNMENTS TAB */}
+        {activeTab === 'assignments' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
+              <div>
+                <h2 style={{ fontSize: '22px', fontWeight: '800', color: '#e0e6f0', marginBottom: '6px' }}>
+                  📝 Assignments
+                </h2>
+                <p style={{ color: '#64748b', fontSize: '14px' }}>
+                  Create and grade student assignments
+                </p>
+              </div>
+              <button
+                onClick={() => setShowAssignmentForm(!showAssignmentForm)}
+                style={{
+                  background: 'linear-gradient(135deg, #6c63ff, #48cfad)',
+                  color: 'white', border: 'none',
+                  padding: '10px 20px', borderRadius: '10px',
+                  fontSize: '14px', fontWeight: '700'
+                }}
+              >
+                + Create Assignment
+              </button>
+            </div>
+
+            {/* Assignment Success Message */}
+            {assignmentMsg && (
+              <div style={{
+                background: 'rgba(72,207,173,0.1)',
+                border: '1px solid rgba(72,207,173,0.3)',
+                borderRadius: '12px', padding: '15px 20px',
+                color: '#48cfad', marginBottom: '20px',
+                fontSize: '15px', fontWeight: '600'
+              }}>
+                ✅ {assignmentMsg}
+              </div>
+            )}
+
+            {/* Create Assignment Form */}
+            {showAssignmentForm && (
+              <div style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(108,99,255,0.3)',
+                borderRadius: '20px', padding: '25px',
+                marginBottom: '25px'
+              }}>
+                <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#e0e6f0', marginBottom: '20px' }}>
+                  📝 New Assignment
+                </h3>
+
+                {/* Course Select */}
+                <label style={{ color: '#94a3b8', fontSize: '13px', fontWeight: '600', display: 'block', marginBottom: '8px', textTransform: 'uppercase' }}>
+                  Select Course *
+                </label>
+                <select
+                  value={newAssignment.courseId}
+                  onChange={(e) => setNewAssignment({...newAssignment, courseId: e.target.value})}
+                  style={{
+                    width: '100%', padding: '12px 16px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(108,99,255,0.3)',
+                    borderRadius: '10px', color: '#e0e6f0',
+                    fontSize: '14px', outline: 'none',
+                    boxSizing: 'border-box', marginBottom: '14px'
+                  }}
+                >
+                  <option value="">Choose a course...</option>
+                  {courses.map((course, i) => (
+                    <option key={i} value={course._id}>{course.title}</option>
+                  ))}
+                </select>
+
+                {/* Title */}
+                <input
+                  placeholder="Assignment Title *"
+                  value={newAssignment.title}
+                  onChange={(e) => setNewAssignment({...newAssignment, title: e.target.value})}
+                  style={{
+                    width: '100%', padding: '12px 16px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(108,99,255,0.3)',
+                    borderRadius: '10px', color: '#e0e6f0',
+                    fontSize: '14px', outline: 'none',
+                    boxSizing: 'border-box', marginBottom: '14px'
+                  }}
+                />
+
+                {/* Description */}
+                <textarea
+                  placeholder="Assignment Description & Instructions *"
+                  value={newAssignment.description}
+                  onChange={(e) => setNewAssignment({...newAssignment, description: e.target.value})}
+                  style={{
+                    width: '100%', padding: '12px 16px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(108,99,255,0.3)',
+                    borderRadius: '10px', color: '#e0e6f0',
+                    fontSize: '14px', outline: 'none',
+                    minHeight: '100px', resize: 'vertical',
+                    boxSizing: 'border-box', marginBottom: '14px'
+                  }}
+                />
+
+                {/* Due Date and Max Marks */}
+                <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ color: '#94a3b8', fontSize: '13px', fontWeight: '600', display: 'block', marginBottom: '8px', textTransform: 'uppercase' }}>
+                      Due Date *
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={newAssignment.dueDate}
+                      onChange={(e) => setNewAssignment({...newAssignment, dueDate: e.target.value})}
+                      style={{
+                        width: '100%', padding: '12px 16px',
+                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(108,99,255,0.3)',
+                        borderRadius: '10px', color: '#e0e6f0',
+                        fontSize: '14px', outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ color: '#94a3b8', fontSize: '13px', fontWeight: '600', display: 'block', marginBottom: '8px', textTransform: 'uppercase' }}>
+                      Max Marks
+                    </label>
+                    <input
+                      type="number"
+                      value={newAssignment.maxMarks}
+                      onChange={(e) => setNewAssignment({...newAssignment, maxMarks: e.target.value})}
+                      style={{
+                        width: '100%', padding: '12px 16px',
+                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(108,99,255,0.3)',
+                        borderRadius: '10px', color: '#e0e6f0',
+                        fontSize: '14px', outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button
+                    onClick={async () => {
+                      if (!newAssignment.courseId || !newAssignment.title || !newAssignment.description || !newAssignment.dueDate) {
+                        setAssignmentMsg('Please fill all required fields!');
+                        return;
+                      }
+                      setCreatingAssignment(true);
+                      try {
+                        await createAssignment(newAssignment);
+                        setAssignmentMsg('Assignment created successfully!');
+                        setShowAssignmentForm(false);
+                        setNewAssignment({ courseId: '', title: '', description: '', dueDate: '', maxMarks: 100 });
+                        fetchAssignments();
+                        setTimeout(() => setAssignmentMsg(''), 3000);
+                      } catch (error) {
+                        setAssignmentMsg('Failed to create assignment');
+                      } finally {
+                        setCreatingAssignment(false);
+                      }
+                    }}
+                    disabled={creatingAssignment}
+                    style={{
+                      flex: 1, padding: '12px',
+                      background: 'linear-gradient(135deg, #6c63ff, #48cfad)',
+                      color: 'white', border: 'none',
+                      borderRadius: '10px', fontSize: '15px', fontWeight: '700'
+                    }}
+                  >
+                    {creatingAssignment ? '⏳ Creating...' : '🚀 Create Assignment'}
+                  </button>
+                  <button
+                    onClick={() => setShowAssignmentForm(false)}
+                    style={{
+                      flex: 1, padding: '12px',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      color: '#64748b', borderRadius: '10px',
+                      fontSize: '15px', fontWeight: '700'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Assignments List */}
+            {assignments.length === 0 ? (
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.07)',
+                borderRadius: '20px', padding: '60px', textAlign: 'center'
+              }}>
+                <p style={{ fontSize: '50px', marginBottom: '15px' }}>📝</p>
+                <p style={{ color: '#64748b', fontSize: '18px' }}>
+                  No assignments created yet!
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {assignments.map((assignment, i) => {
+                  const colors = ['#6c63ff', '#48cfad', '#f7b731', '#fc5c7d'];
+                  const color = colors[i % colors.length];
+                  return (
+                    <div key={i} style={{
+                      background: 'rgba(255,255,255,0.03)',
+                      border: `1px solid ${color}30`,
+                      borderRadius: '20px', overflow: 'hidden'
+                    }}>
+                      {/* Header */}
+                      <div style={{
+                        padding: '20px 25px',
+                        background: `linear-gradient(135deg, ${color}15, ${color}05)`,
+                        borderBottom: `1px solid ${color}20`,
+                        display: 'flex', justifyContent: 'space-between',
+                        alignItems: 'center', flexWrap: 'wrap', gap: '10px'
+                      }}>
+                        <div>
+                          <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#e0e6f0', marginBottom: '4px' }}>
+                            {assignment.title}
+                          </h3>
+                          <p style={{ fontSize: '13px', color: '#475569' }}>
+                            📚 {assignment.courseId?.title} • Max: {assignment.maxMarks} marks •
+                            Due: {new Date(assignment.dueDate).toLocaleDateString()} •
+                            {assignment.submissions?.length || 0} submissions
+                          </p>
+                        </div>
+                        <span style={{
+                          background: `${color}22`, color,
+                          padding: '4px 14px', borderRadius: '20px',
+                          fontSize: '12px', fontWeight: '700'
+                        }}>
+                          {assignment.submissions?.length || 0} Submitted
+                        </span>
+                      </div>
+
+                      {/* Submissions */}
+                      <div style={{ padding: '20px 25px' }}>
+                        <p style={{ color: '#94a3b8', fontSize: '14px', lineHeight: '1.6', marginBottom: '20px' }}>
+                          {assignment.description}
+                        </p>
+
+                        {assignment.submissions?.length === 0 ? (
+                          <p style={{ color: '#475569', fontSize: '14px', textAlign: 'center', padding: '20px' }}>
+                            No submissions yet
+                          </p>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            <h4 style={{ color: '#94a3b8', fontSize: '13px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                              Student Submissions
+                            </h4>
+                            {assignment.submissions.map((sub, j) => (
+                              <div key={j} style={{
+                                background: 'rgba(255,255,255,0.03)',
+                                border: '1px solid rgba(255,255,255,0.06)',
+                                borderRadius: '12px', padding: '18px'
+                              }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                                  <div>
+                                    <p style={{ color: '#e0e6f0', fontSize: '15px', fontWeight: '700' }}>
+                                      {sub.studentName}
+                                    </p>
+                                    <p style={{ color: '#475569', fontSize: '12px' }}>
+                                      Submitted: {new Date(sub.submittedAt).toLocaleDateString()}
+                                    </p>
+                                  </div>
+                                  {sub.status === 'graded' && (
+                                    <span style={{
+                                      background: 'rgba(247,183,49,0.15)',
+                                      color: '#f7b731', padding: '4px 12px',
+                                      borderRadius: '20px', fontSize: '12px', fontWeight: '700'
+                                    }}>
+                                      🏆 {sub.grade}/{assignment.maxMarks}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div style={{
+                                  background: 'rgba(255,255,255,0.02)',
+                                  border: '1px solid rgba(255,255,255,0.05)',
+                                  borderRadius: '8px', padding: '12px',
+                                  marginBottom: '14px'
+                                }}>
+                                  <p style={{ color: '#94a3b8', fontSize: '13px', lineHeight: '1.6' }}>
+                                    {sub.submissionText}
+                                  </p>
+                                </div>
+
+                                {/* Grade Form */}
+                                {sub.status !== 'graded' && (
+                                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                    <input
+                                      type="number"
+                                      placeholder={`Grade (0-${assignment.maxMarks})`}
+                                      value={gradeData[`${assignment._id}_${sub.studentId}`]?.grade || ''}
+                                      onChange={(e) => setGradeData(prev => ({
+                                        ...prev,
+                                        [`${assignment._id}_${sub.studentId}`]: {
+                                          ...prev[`${assignment._id}_${sub.studentId}`],
+                                          grade: e.target.value
+                                        }
+                                      }))}
+                                      style={{
+                                        width: '120px', padding: '8px 12px',
+                                        background: 'rgba(255,255,255,0.05)',
+                                        border: '1px solid rgba(108,99,255,0.3)',
+                                        borderRadius: '8px', color: '#e0e6f0',
+                                        fontSize: '13px', outline: 'none'
+                                      }}
+                                    />
+                                    <input
+                                      placeholder="Feedback (optional)"
+                                      value={gradeData[`${assignment._id}_${sub.studentId}`]?.feedback || ''}
+                                      onChange={(e) => setGradeData(prev => ({
+                                        ...prev,
+                                        [`${assignment._id}_${sub.studentId}`]: {
+                                          ...prev[`${assignment._id}_${sub.studentId}`],
+                                          feedback: e.target.value
+                                        }
+                                      }))}
+                                      style={{
+                                        flex: 1, padding: '8px 12px',
+                                        background: 'rgba(255,255,255,0.05)',
+                                        border: '1px solid rgba(108,99,255,0.3)',
+                                        borderRadius: '8px', color: '#e0e6f0',
+                                        fontSize: '13px', outline: 'none',
+                                        minWidth: '150px'
+                                      }}
+                                    />
+                                    <button
+                                      onClick={async () => {
+                                        const key = `${assignment._id}_${sub.studentId}`;
+                                        const data = gradeData[key];
+                                        if (!data?.grade) return;
+                                        setGradingId(key);
+                                        try {
+                                          await gradeAssignment(assignment._id, sub.studentId, {
+                                            grade: Number(data.grade),
+                                            feedback: data.feedback || ''
+                                          });
+                                          setAssignmentMsg('Assignment graded successfully!');
+                                          fetchAssignments();
+                                          setTimeout(() => setAssignmentMsg(''), 3000);
+                                        } catch (error) {
+                                          setAssignmentMsg('Failed to grade assignment');
+                                        } finally {
+                                          setGradingId(null);
+                                        }
+                                      }}
+                                      disabled={gradingId === `${assignment._id}_${sub.studentId}`}
+                                      style={{
+                                        padding: '8px 18px',
+                                        background: 'linear-gradient(135deg, #f7b731, #fc5c7d)',
+                                        color: 'white', border: 'none',
+                                        borderRadius: '8px', fontSize: '13px',
+                                        fontWeight: '700', cursor: 'pointer'
+                                      }}
+                                    >
+                                      {gradingId === `${assignment._id}_${sub.studentId}` ? '⏳' : '🏆 Grade'}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* LIVE CLASSROOM TAB */}
         {activeTab === 'live classroom' && (
@@ -436,7 +855,7 @@ function InstructorDashboard() {
                   const heights = [30, 50, 40, 70, 55, 85, 65];
                   return (
                     <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                      <div style={{ width: '100%', height: `${heights[i]}%`, background: i === 5 ? 'linear-gradient(180deg, #6c63ff, #48cfad)' : 'rgba(108,99,255,0.3)', borderRadius: '6px 6px 0 0', boxShadow: i === 5 ? '0 0 15px rgba(108,99,255,0.5)' : 'none' }} />
+                      <div style={{ width: '100%', height: `${heights[i]}%`, background: i === 5 ? 'linear-gradient(180deg, #6c63ff, #48cfad)' : 'rgba(108,99,255,0.3)', borderRadius: '6px 6px 0 0' }} />
                       <span style={{ fontSize: '11px', color: '#475569' }}>{month}</span>
                     </div>
                   );
@@ -459,7 +878,7 @@ function InstructorDashboard() {
                       <span style={{ fontSize: '14px', color, fontWeight: '700' }}>{course.enrolledCount} students</span>
                     </div>
                     <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '10px', height: '8px' }}>
-                      <div style={{ background: `linear-gradient(90deg, ${color}, ${color}88)`, width: `${percentage}%`, height: '8px', borderRadius: '10px', boxShadow: `0 0 8px ${color}66` }} />
+                      <div style={{ background: `linear-gradient(90deg, ${color}, ${color}88)`, width: `${percentage}%`, height: '8px', borderRadius: '10px' }} />
                     </div>
                   </div>
                 );
@@ -467,7 +886,20 @@ function InstructorDashboard() {
             </div>
           </div>
         )}
+
       </div>
+
+      {/* Course Chat Popup */}
+      {activeChat && (
+        <CourseChat
+          courseId={activeChat}
+          courseName={courses.find(c => c._id?.toString() === activeChat)?.title || 'Course Discussion'}
+          user={user}
+          socket={socket}
+          onClose={() => setActiveChat(null)}
+        />
+      )}
+
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getMyProgress, getCourses, updateLectureProgress, enrollCourse, getRecommendations, updateInterests } from '../api';
+import { getMyProgress, getCourses, updateLectureProgress, enrollCourse, getRecommendations, updateInterests, getStudentAssignments, submitAssignment } from '../api';
 import LectureViewer from '../components/LectureViewer';
 import Quiz from '../components/Quiz';
 import NotificationBell from '../components/NotificationBell';
@@ -18,16 +18,18 @@ function StudentDashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [progressRes, coursesRes, recRes] = await Promise.all([
+        const [progressRes, coursesRes, recRes, assignRes] = await Promise.all([
           getMyProgress(),
           getCourses(),
-          getRecommendations()
+          getRecommendations(),
+          getStudentAssignments()
         ]);
         setProgress(progressRes.data.progress || []);
         setCourses(coursesRes.data.courses || []);
         setRecommendations(recRes.data.recommendations || []);
         setUserInterests(recRes.data.userInterests || []);
         setTempInterests(recRes.data.userInterests || []);
+        setAssignments(assignRes.data.assignments || []);
       } catch (error) {
         console.error('Error fetching data:', error);
       } finally {
@@ -75,6 +77,10 @@ function StudentDashboard() {
   const [editingInterests, setEditingInterests] = useState(false);
   const [tempInterests, setTempInterests] = useState([]);
   const [savingInterests, setSavingInterests] = useState(false);
+  const [assignments, setAssignments] = useState([]);
+  const [submittingId, setSubmittingId] = useState(null);
+  const [submissionText, setSubmissionText] = useState({});
+  const [submitSuccess, setSubmitSuccess] = useState('');
 
   const handleEnroll = async (courseId) => {
     setEnrollingId(courseId);
@@ -163,7 +169,7 @@ function StudentDashboard() {
     link.href = canvas.toDataURL('image/png');
     link.click();
   };
-  const tabs = ['overview', 'my courses', 'recommendations', 'explore', 'certificates'];
+  const tabs = ['overview', 'my courses', 'recommendations', 'assignments', 'explore', 'certificates'];
 
   if (loading) return (
     <div style={{
@@ -954,6 +960,249 @@ function StudentDashboard() {
                     );
                   })}
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+        {/* ASSIGNMENTS TAB */}
+        {activeTab === 'assignments' && (
+          <div>
+            <h2 style={{ fontSize: '22px', fontWeight: '800', color: '#e0e6f0', marginBottom: '6px' }}>
+              📝 My Assignments
+            </h2>
+            <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '25px' }}>
+              Submit your assignments and track your grades
+            </p>
+
+            {/* Success Message */}
+            {submitSuccess && (
+              <div style={{
+                background: 'rgba(72,207,173,0.1)',
+                border: '1px solid rgba(72,207,173,0.3)',
+                borderRadius: '12px', padding: '15px 20px',
+                color: '#48cfad', marginBottom: '20px',
+                fontSize: '15px', fontWeight: '600'
+              }}>
+                ✅ {submitSuccess}
+              </div>
+            )}
+
+            {assignments.length === 0 ? (
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.07)',
+                borderRadius: '20px', padding: '60px', textAlign: 'center'
+              }}>
+                <p style={{ fontSize: '50px', marginBottom: '15px' }}>📝</p>
+                <p style={{ color: '#e0e6f0', fontSize: '18px', fontWeight: '700', marginBottom: '10px' }}>
+                  No Assignments Yet!
+                </p>
+                <p style={{ color: '#64748b', fontSize: '14px' }}>
+                  Your instructor hasn't posted any assignments yet.
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {assignments.map((assignment, i) => {
+                  const isSubmitted = assignment.submission !== null;
+                  const isGraded = assignment.submission?.status === 'graded';
+                  const isPastDue = new Date(assignment.dueDate) < new Date();
+                  const colors = ['#6c63ff', '#48cfad', '#f7b731', '#fc5c7d'];
+                  const color = colors[i % colors.length];
+
+                  return (
+                    <div key={i} style={{
+                      background: 'rgba(255,255,255,0.03)',
+                      border: `1px solid ${color}30`,
+                      borderRadius: '20px', overflow: 'hidden'
+                    }}>
+                      {/* Assignment Header */}
+                      <div style={{
+                        padding: '20px 25px',
+                        background: `linear-gradient(135deg, ${color}15, ${color}05)`,
+                        borderBottom: `1px solid ${color}20`,
+                        display: 'flex', justifyContent: 'space-between',
+                        alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px'
+                      }}>
+                        <div>
+                          <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#e0e6f0', marginBottom: '4px' }}>
+                            {assignment.title}
+                          </h3>
+                          <p style={{ fontSize: '13px', color: '#475569' }}>
+                            📚 {assignment.courseTitle} • Max Marks: {assignment.maxMarks}
+                          </p>
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                          <span style={{
+                            background: isPastDue ? 'rgba(252,92,125,0.15)' : 'rgba(72,207,173,0.15)',
+                            color: isPastDue ? '#fc5c7d' : '#48cfad',
+                            padding: '4px 12px', borderRadius: '20px',
+                            fontSize: '12px', fontWeight: '700'
+                          }}>
+                            {isPastDue ? '⏰ Past Due' : '✅ Open'}
+                          </span>
+                          {isGraded && (
+                            <span style={{
+                              background: 'rgba(247,183,49,0.15)',
+                              color: '#f7b731',
+                              padding: '4px 12px', borderRadius: '20px',
+                              fontSize: '12px', fontWeight: '700'
+                            }}>
+                              🏆 Graded: {assignment.submission.grade}/{assignment.maxMarks}
+                            </span>
+                          )}
+                          {isSubmitted && !isGraded && (
+                            <span style={{
+                              background: 'rgba(108,99,255,0.15)',
+                              color: '#a78bfa',
+                              padding: '4px 12px', borderRadius: '20px',
+                              fontSize: '12px', fontWeight: '700'
+                            }}>
+                              ⏳ Submitted
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Assignment Body */}
+                      <div style={{ padding: '20px 25px' }}>
+                        <p style={{ color: '#94a3b8', fontSize: '14px', lineHeight: '1.7', marginBottom: '15px' }}>
+                          {assignment.description}
+                        </p>
+                        <p style={{ color: '#475569', fontSize: '13px', marginBottom: '20px' }}>
+                          📅 Due: {new Date(assignment.dueDate).toLocaleDateString('en-US', {
+                            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+                          })}
+                        </p>
+
+                        {/* Submission Section */}
+                        {isGraded ? (
+                          <div style={{
+                            background: 'rgba(247,183,49,0.08)',
+                            border: '1px solid rgba(247,183,49,0.2)',
+                            borderRadius: '12px', padding: '18px'
+                          }}>
+                            <h4 style={{ color: '#f7b731', fontSize: '14px', fontWeight: '700', marginBottom: '10px' }}>
+                              🏆 Graded Result
+                            </h4>
+                            <div style={{ display: 'flex', gap: '20px', marginBottom: '10px' }}>
+                              <div>
+                                <p style={{ color: '#64748b', fontSize: '12px' }}>Score</p>
+                                <p style={{ color: '#f7b731', fontSize: '24px', fontWeight: '900' }}>
+                                  {assignment.submission.grade}/{assignment.maxMarks}
+                                </p>
+                              </div>
+                              <div>
+                                <p style={{ color: '#64748b', fontSize: '12px' }}>Percentage</p>
+                                <p style={{ color: '#48cfad', fontSize: '24px', fontWeight: '900' }}>
+                                  {Math.round((assignment.submission.grade / assignment.maxMarks) * 100)}%
+                                </p>
+                              </div>
+                            </div>
+                            {assignment.submission.feedback && (
+                              <div>
+                                <p style={{ color: '#64748b', fontSize: '12px', marginBottom: '4px' }}>
+                                  Instructor Feedback:
+                                </p>
+                                <p style={{ color: '#94a3b8', fontSize: '14px', fontStyle: 'italic' }}>
+                                  "{assignment.submission.feedback}"
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        ) : isSubmitted ? (
+                          <div style={{
+                            background: 'rgba(108,99,255,0.08)',
+                            border: '1px solid rgba(108,99,255,0.2)',
+                            borderRadius: '12px', padding: '18px'
+                          }}>
+                            <h4 style={{ color: '#a78bfa', fontSize: '14px', fontWeight: '700', marginBottom: '8px' }}>
+                              ✅ Your Submission
+                            </h4>
+                            <p style={{ color: '#94a3b8', fontSize: '14px', lineHeight: '1.6' }}>
+                              {assignment.submission.submissionText}
+                            </p>
+                            <p style={{ color: '#475569', fontSize: '12px', marginTop: '8px' }}>
+                              Submitted on {new Date(assignment.submission.submittedAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                        ) : !isPastDue ? (
+                          <div>
+                            <label style={{
+                              display: 'block', color: '#94a3b8',
+                              fontSize: '13px', fontWeight: '600',
+                              textTransform: 'uppercase', letterSpacing: '0.5px',
+                              marginBottom: '10px'
+                            }}>
+                              Your Answer
+                            </label>
+                            <textarea
+                              placeholder="Write your assignment answer here..."
+                              value={submissionText[assignment._id] || ''}
+                              onChange={(e) => setSubmissionText(prev => ({
+                                ...prev, [assignment._id]: e.target.value
+                              }))}
+                              style={{
+                                width: '100%', padding: '14px',
+                                background: 'rgba(255,255,255,0.05)',
+                                border: '1px solid rgba(108,99,255,0.3)',
+                                borderRadius: '12px', color: '#e0e6f0',
+                                fontSize: '14px', outline: 'none',
+                                minHeight: '120px', resize: 'vertical',
+                                boxSizing: 'border-box', lineHeight: '1.6',
+                                marginBottom: '12px'
+                              }}
+                            />
+                            <button
+                              onClick={async () => {
+                                if (!submissionText[assignment._id]?.trim()) return;
+                                setSubmittingId(assignment._id);
+                                try {
+                                  await submitAssignment(assignment._id, {
+                                    submissionText: submissionText[assignment._id]
+                                  });
+                                  setSubmitSuccess('Assignment submitted successfully!');
+                                  setTimeout(() => setSubmitSuccess(''), 3000);
+                                  const res = await getStudentAssignments();
+                                  setAssignments(res.data.assignments || []);
+                                  setSubmissionText(prev => ({ ...prev, [assignment._id]: '' }));
+                                } catch (error) {
+                                  alert(error.response?.data?.message || 'Failed to submit');
+                                } finally {
+                                  setSubmittingId(null);
+                                }
+                              }}
+                              disabled={!submissionText[assignment._id]?.trim() || submittingId === assignment._id}
+                              style={{
+                                width: '100%', padding: '12px',
+                                background: submissionText[assignment._id]?.trim()
+                                  ? 'linear-gradient(135deg, #6c63ff, #48cfad)'
+                                  : 'rgba(255,255,255,0.05)',
+                                color: submissionText[assignment._id]?.trim() ? 'white' : '#475569',
+                                border: 'none', borderRadius: '10px',
+                                fontSize: '15px', fontWeight: '700',
+                                cursor: submissionText[assignment._id]?.trim() ? 'pointer' : 'not-allowed'
+                              }}
+                            >
+                              {submittingId === assignment._id ? '⏳ Submitting...' : '📤 Submit Assignment'}
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{
+                            background: 'rgba(252,92,125,0.08)',
+                            border: '1px solid rgba(252,92,125,0.2)',
+                            borderRadius: '12px', padding: '18px',
+                            textAlign: 'center'
+                          }}>
+                            <p style={{ color: '#fc5c7d', fontSize: '14px', fontWeight: '600' }}>
+                              ⏰ Submission deadline has passed
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
