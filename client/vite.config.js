@@ -5,16 +5,6 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: 'dist',
-    minify: 'terser',
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          socket: ['socket.io-client'],
-          axios: ['axios']
-        }
-      }
-    },
     chunkSizeWarningLimit: 1000
   },
   server: {
